@@ -4,11 +4,11 @@ from dataclasses import dataclass
 @dataclass
 class NominalState:
     """
-    Nominal state, NO covariance.
-    p: world position [m], shape (3,)
-    v: world velocity [m/s], shape (3,)
-    q: body-to-world unit quaternion [w,x,y,z], shape (4,)
-    a_b: body imu accelerometer bias [m/s^2], shape (3,)
+    Nominal state: \n
+    p: world position [m], shape (3,) \n
+    v: world velocity [m/s], shape (3,) \n
+    q: body-to-world unit quaternion [w,x,y,z], shape (4,) \n
+    a_b: body imu accelerometer bias [m/s^2], shape (3,) \n
     w_b: body imu gyroscope bias [rad/s], shape (3,)
     """
 

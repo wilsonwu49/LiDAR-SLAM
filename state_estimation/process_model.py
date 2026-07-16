@@ -2,13 +2,14 @@ from state import NominalState, IDX
 import numpy as np
 from quaternion import quat_to_rot, rotvec_to_quat, quat_mul, quat_normalize, skew
 
-# Main Functions
 def propagate_nominal(x: NominalState, a_m: np.ndarray, w_m: np.ndarray, dt: float, g: np.ndarray) -> NominalState:
     """Integrate the nominal state forward by dt using one IMU sample.
-    a_m: measured specific force, body frame [m/s^2], shape (3,)
-    w_m: measured angular rate, body frame [rad/s], shape (3,)
-    Returns a NEW NominalState. Must renormalize the quaternion before return.
-    Uses exact rotation-vector exp for the attitude update; Euler for p, v.
+    x: initial NominalState \n
+    a_m: raw measured acceleration, body frame [m/s^2], shape (3,) \n
+    w_m: raw measured angular velocity, body frame [rad/s], shape (3,) \n
+    dt: time between IMU samples \n
+    g: world frame gravity \n
+    returns new NominalState one step forward.
     """
     R = quat_to_rot(x.q)
 
@@ -32,7 +33,8 @@ def propagate_nominal(x: NominalState, a_m: np.ndarray, w_m: np.ndarray, dt: flo
     return newState
 
 def error_state_F(x: NominalState, a_m, w_m, dt) -> np.ndarray:
-    """Return the 15x15 discrete error-state transition matrix F."""
+    """Return the 15x15 discrete error-state transition matrix F.\n
+    returns F: new_error = F @ old_error"""
 
     F = np.zeros((15,15))
     F[IDX['dp'],IDX['dp']] = np.eye(3)
@@ -51,7 +53,8 @@ def error_state_F(x: NominalState, a_m, w_m, dt) -> np.ndarray:
     return F
 
 def build_Q(sigma_a, sigma_g, sigma_ba, sigma_bg, dt) -> np.ndarray:
-    """Return the 15x15 block-diagonal discrete process-noise covariance."""
+    """Return the 15x15 block-diagonal discrete process-noise covariance:\n
+    Q (15,15) added to P every predict step"""
 
     Q = np.zeros((15,15))
     Q[IDX['dv'],IDX['dv']] = sigma_a**2 * dt * np.eye(3)

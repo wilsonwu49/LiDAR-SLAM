@@ -1,6 +1,7 @@
 import numpy as np
-from state_estimation.state import NominalState, IDX
-from state_estimation.process_model import propagate_nominal, quat_mul, rotvec_to_quat, quat_normalize, error_state_F, build_Q
+from state import NominalState, IDX
+from process_model import propagate_nominal, quat_mul, rotvec_to_quat, quat_normalize, error_state_F, build_Q
+from measurement_models import encoder_h_and_H
 
 
 ### TESTING PROPAGATE NOMINAL
@@ -142,3 +143,27 @@ assert np.all(rel_err < 0.01), "attitude variance doesn't match sigma_g^2 * t"
 # Check 2: position variance grows much faster than linear (roughly t^3)
 ratio = results[100]["dp_var"] / results[50]["dp_var"]
 print(f"position variance ratio (t=100 / t=50): {ratio}  -- expect ~8 if cubic, ~2 if only linear")
+
+### TESTING ENCODER
+
+x0 = NominalState(
+    p=np.zeros(3), v=np.array([0.5, 0.1, -0.05]),
+    q=quat_normalize(rotvec_to_quat(np.array([0.1, 0.05, 0.2]))),
+    a_b=np.zeros(3), w_b=np.zeros(3),
+)
+
+h0, H_analytic = encoder_h_and_H(x0)
+
+eps = 1e-6
+H_numeric = np.zeros((3, 15))
+for i in range(15):
+    dx = np.zeros(15)
+    dx[i] = eps
+    x_pert = inject(x0, dx)
+    h_pert, _ = encoder_h_and_H(x_pert)
+    H_numeric[:, i] = (h_pert - h0) / eps
+
+max_diff = np.max(np.abs(H_numeric - H_analytic))
+print(f"max abs difference: {max_diff}")
+assert max_diff < 1e-4, "H doesn't match finite-difference Jacobian"
+print("H checkpoint PASSED")
