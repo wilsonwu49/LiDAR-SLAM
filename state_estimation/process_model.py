@@ -3,7 +3,7 @@ import numpy as np
 from quaternion import quat_to_rot, rotvec_to_quat, quat_mul, quat_normalize, skew
 
 def propagate_nominal(x: NominalState, a_m: np.ndarray, w_m: np.ndarray, dt: float, g: np.ndarray) -> NominalState:
-    """Integrate the nominal state forward by dt using one IMU sample.
+    """Integrate the nominal state forward by dt using one IMU sample. \n
     x: initial NominalState \n
     a_m: raw measured acceleration, body frame [m/s^2], shape (3,) \n
     w_m: raw measured angular velocity, body frame [rad/s], shape (3,) \n
