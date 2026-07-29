@@ -2,6 +2,7 @@ import numpy as np
 from scipy.stats import chi2
 
 from state import NominalState, IDX
+from quaternion import quat_to_rot, quat_to_yaw
 from process_model import propagate_nominal, error_state_F, build_Q
 from measurement_models import encoder_h_and_H
 from kalman import kalman_update, inject_and_reset
@@ -56,12 +57,24 @@ class ESEKF:
         self.x, self.P = inject_and_reset(self.x, dx_hat, P_plus)
         return True
 
-    def update_icp(self, rel_pose_meas: np.ndarray) -> bool:
-        """NIS-gate, then correct self.x/self.P from a Module-2 relative pose reading.
-        rel_pose_meas: (Δx, Δy, Δyaw) from Module 2's scan matcher.
-        returns: True if accepted and applied, False if rejected by the NIS gate.
-        """
-        pass
+    def update_icp(self, rel_pose_meas: np.ndarray, R_icp: np.ndarray, x_prev: NominalState) -> bool:
+        R_prev = quat_to_rot(x_prev.q)
+        dp_predicted = R_prev.T @ (self.x.p - x_prev.p)
+        dyaw_predicted = quat_to_yaw(self.x.q) - quat_to_yaw(x_prev.q)
+
+        h = np.array([dp_predicted[0], dp_predicted[1], dyaw_predicted])
+        H = np.zeros((3, 15))
+        H[0:2, 0:2] = R_prev[0:2, 0:2].T
+        H[2, 8] = 1.0
+
+        y = rel_pose_meas - h
+        S = H @ self.P @ H.T + R_icp
+        if nis(y, S) > chi2.ppf(0.99, df=3):
+            return False
+
+        dx_hat, P_plus = kalman_update(self.P, H, R_icp, y)
+        self.x, self.P = inject_and_reset(self.x, dx_hat, P_plus)
+        return True
 
     def pose_with_covariance(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Return the (x, y, yaw) pose estimate and its 3x3 covariance, for Module 4 (A*) and Module 5 (CBF-QP).

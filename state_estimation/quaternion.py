@@ -38,3 +38,6 @@ def quat_normalize(q: np.ndarray) -> np.ndarray:
     n = np.linalg.norm(q)
     return (q / n)
 
+def quat_to_yaw(q: np.ndarray) -> float:
+    w, x, y, z = q
+    return np.arctan2(2 * (w*z + x*y), 1 - 2 * (y**2 + z**2))
