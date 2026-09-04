@@ -1,11 +1,11 @@
 import numpy as np
-from geometry import transform_points
-from correspondence import Correspondences
-from normals import estimate_normals
-from costs import point_to_line_cost
-from ptl_solve import solve_point_to_line_step
-from outliers import trim_correspondences, robust_weights
-from icp_ekf import icp_pose_covariance
+from icp.geometry import transform_points
+from icp.correspondence import Correspondences
+from icp.normals import estimate_normals
+from icp.costs import point_to_line_cost
+from icp.ptl_solve import solve_point_to_line_step
+from icp.outliers import trim_correspondences, robust_weights
+from icp.icp_ekf import icp_pose_covariance
 
 
 def icp_scan_match(source_pts, reference_pts, init_phi=0.0, init_t=(0.0, 0.0),

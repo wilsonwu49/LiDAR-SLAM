@@ -1,6 +1,6 @@
 import numpy as np
-from bresenham import bresenham_cells
-from inv_sensor_model import classify_beam
+from occupancy.bresenham import bresenham_cells
+from occupancy.inv_sensor_model import classify_beam
 
 # Convention, fixed for this whole file:
 #   logodds has shape (H, W), indexed logodds[cy, cx]

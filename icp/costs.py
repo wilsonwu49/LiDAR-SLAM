@@ -1,5 +1,5 @@
 import numpy as np 
-from geometry import transform_points
+from icp.geometry import transform_points
 
 def point_to_point_cost(src: np.ndarray, dst: np.ndarray, phi: float, t: np.ndarray) -> float:
     """Sum of squared Euclidean residuals for given correspondences.

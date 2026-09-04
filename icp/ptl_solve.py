@@ -10,6 +10,9 @@ def solve_point_to_line_step(src: np.ndarray, dst: np.ndarray, normals: np.ndarr
     d_t   : (2,) incremental translation.
     """
 
+    if weights is None:
+        weights = np.ones(len(src))
+
     A = np.array([normals[:,0],normals[:,1],-normals[:,0]*src[:,1]+normals[:,1]*src[:,0]]).T
     B = np.sum(normals * (src - dst), axis = 1)
     
