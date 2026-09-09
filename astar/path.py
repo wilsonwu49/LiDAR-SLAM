@@ -10,13 +10,21 @@ def prune_line_of_sight(path_cells, lethal_mask):
     lethal_mask  bool array (H, W), True = impassable
     returns      shorter list of (r, c), first and last preserved
     """
-    # walk forward from the current kept waypoint, find the furthest later
-    # waypoint reachable by a straight line that crosses no lethal cell
-    # (use bresenham_cells to enumerate that line), keep it, repeat
-    ...
+    corner_cells = [path_cells[0]]
+    anchor = 0
+    while corner_cells[-1] != path_cells[-1]:
+        best = anchor + 1
+        for i in range(len(path_cells) - 1, anchor, -1):
+            subpath_cells = bresenham_cells(corner_cells[-1][0],corner_cells[-1][1],path_cells[i][0],path_cells[i][1])
+            if not any(lethal_mask[x, y] for x, y in subpath_cells):
+                best = i
+                break
+        corner_cells.append(path_cells[best])
+        anchor = best
+    return corner_cells
 
 
-def to_reference_path(path_cells, origin, resolution, resample_ds):
+def to_reference_path(path_cells, origin, resolution, resample_ds=None):
     """
     Convert grid cells to the world-frame waypoint array Module 5 tracks.
 
@@ -26,7 +34,22 @@ def to_reference_path(path_cells, origin, resolution, resample_ds):
     resample_ds   target spacing between output waypoints [m]
     returns       (N, 2) float array of world (x, y) waypoints
     """
-    # 1. cell -> world CENTRE:  origin + (index + 0.5) * resolution
-    #    note (r, c) is (row, col) = (cy, cx), so x comes from c and y from r
-    # 2. resample along the polyline to roughly uniform spacing resample_ds
-    ...
+
+    cells = np.asarray(path_cells, dtype=float)[:, ::-1]     # (r, c) -> (c, r)
+    world_points = (cells + 0.5) * resolution + origin
+    if resample_ds == None or len(world_points) < 2:
+        return world_points
+
+    # Summing up distances
+    seg = np.linalg.norm(np.diff(world_points, axis=0), axis=1)
+    d = np.concatenate([[0.0], np.cumsum(seg)])
+
+    if d[-1] < 1e-9:
+        return world_points
+
+    # Query based on target distances knowing total distances
+    s = np.arange(0.0, d[-1], resample_ds) 
+    x = np.interp(s, d, world_points[:, 0])
+    y = np.interp(s, d, world_points[:, 1])
+
+    return np.vstack([np.column_stack([x, y]), world_points[-1]])
