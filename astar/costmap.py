@@ -12,6 +12,8 @@ def build_costmap(occupancy, resolution, r_robot, r_safety):
     r_safety     extra clearance margin [m]
     returns      lethal_mask bool array (H, W), True = cannot plan through
     """
+    if not np.any(occupancy):
+        return np.zeros(occupancy.shape, dtype=bool)
     
     dist = ndimage.distance_transform_edt(occupancy == 0)
     r_total = r_robot + r_safety

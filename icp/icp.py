@@ -62,7 +62,7 @@ def icp_scan_match(source_pts, reference_pts, init_phi=0.0, init_t=(0.0, 0.0),
     AtWA = A.T @ (weights[:, None] * A)
     eigvals = np.linalg.eigvalsh(AtWA)
     condition_number = eigvals[-1] / eigvals[0]
-    num_inliers = len(matched_src)
+    num_inliers = int(np.count_nonzero(weights))
 
     cov = icp_pose_covariance(A, weights, residuals)
 

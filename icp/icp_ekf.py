@@ -7,7 +7,7 @@ def icp_pose_covariance(A: np.ndarray, weights: np.ndarray, residuals: np.ndarra
     AtWA = A.T @ (weights[:, None] * A) 
     return sigma2 * np.linalg.inv(AtWA)
 
-def icp_measurement_for_ekf(phi, t, cov, info, min_inliers=20, max_cond=1e8) -> dict | None:
+def icp_measurement_for_ekf(phi, t, cov, info, min_inliers=20, max_cond=1e3) -> dict | None:
     """Package the ICP result as an EKF measurement, or return None if rejected
     """
     if info["converged"] is False:
