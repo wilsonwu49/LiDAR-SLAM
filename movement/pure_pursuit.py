@@ -39,21 +39,22 @@ def pure_pursuit_command(pose, path, v_desired, lookahead_gain,
             found = True
             break
 
-    if not found and L_actual < MIN_GOAL_DISTANCE:
-        return np.array([0.0, 0.0]), np.array([x_L, y_L])
-
-    elif L_actual < 1e-9:
-        return np.array([v_desired, 0.0]), np.array([x_L, y_L])
-
+    if not found:
+        x_L, y_L = x_body[-1], y_body[-1]
     elif i == i_near:
         x_L, y_L = x_body[i], y_body[i]
-
     else:
         t = (L_d - distances[i-1]) / (distances[i] - distances[i-1])
         x_L = x_body[i-1] + t * (x_body[i] - x_body[i-1])
         y_L = y_body[i-1] + t * (y_body[i] - y_body[i-1])
 
-    L_actual = np.max(np.sqrt(x_L**2 + y_L**2), MIN_GOAL_DISTANCE)
+    L_actual = np.sqrt(x_L**2 + y_L**2)
+
+    if not found and L_actual < MIN_GOAL_DISTANCE:
+        return np.array([0.0, 0.0]), np.array([x_L, y_L])
+    if L_actual < 1e-9:
+        return np.array([v_desired, 0.0]), np.array([x_L, y_L])
+
     gamma = 2 * y_L / L_actual**2
     omega = gamma * v_desired
     return np.array([v_desired, omega]), np.array([x_L, y_L])
