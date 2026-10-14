@@ -4,16 +4,30 @@ Two clocks. The control step runs every cycle (~50 Hz) and only brakes or nudges
 A* runs rarely (~2 Hz, or on demand) and is the only thing that can find a detour.
 """
 
+import copy
+
 import numpy as np
+from scipy import ndimage
 
 from astar.astar import astar
 from astar.costmap import build_costmap
 from astar.path import prune_line_of_sight, to_reference_path
+from icp.icp import icp_scan_match
 from movement.controller import control_step
+from state_estimation.quaternion import quat_to_rot
 
 STALL_SPEED = 0.02        # m/s; below this the robot is not making progress
 STALL_STEPS = 25          # consecutive stalled steps before declaring blocked
 REPLAN_PERIOD = 25        # cycles between routine replans (25 @ 50 Hz = 0.5 s)
+G_WORLD = np.array([0.0, 0.0, -9.80665])   # sign matches a_true = R(a_m - b) + g
+R_ICP_FLOOR = np.diag([1e-4, 1e-4, 1e-5])  # keeps ICP's own cov from going singular
+
+
+def polar_to_body(angles, ranges):
+    """(N,) polar scan -> (M, 2) body-frame points, non-returns dropped."""
+    ok = np.isfinite(ranges)
+    return np.column_stack([ranges[ok] * np.cos(angles[ok]),
+                            ranges[ok] * np.sin(angles[ok])])
 
 
 def path_is_blocked(path, grid, lethal):
@@ -62,13 +76,29 @@ def plan(grid, pose, goal_xy, params, occ_threshold=0.85):
     lethal = build_costmap(occupancy, grid.s, params.r_robot, params.r_safety)
     start_cx, start_cy = grid.world_to_cell(pose[0], pose[1])
     goal_cx, goal_cy = grid.world_to_cell(goal_xy[0], goal_xy[1])
-    cells = astar((start_cy, start_cx), (goal_cy, goal_cx), lethal, connectivity=8, max_expansions=20000)
+
+    # The robot may legally sit inside the inflation band: it is wider than the
+    # CBF's reach by design (params.planner_slack). A* cannot expand out of a
+    # lethal region because `neighbors` refuses to enter lethal cells, so plan
+    # from the nearest free cell instead. Pure pursuit tolerates starting off
+    # the path, and the CBF keeps the robot off the wall on the way out.
+    if lethal[start_cy, start_cx]:
+        if lethal.all():
+            return None, lethal                   # nowhere free to escape to
+        _, idx = ndimage.distance_transform_edt(lethal, return_indices=True)
+        # both from the ORIGINAL cell -- assigning start_cy first would corrupt
+        # the lookup for start_cx
+        start_cy, start_cx = (int(idx[0][start_cy, start_cx]),
+                              int(idx[1][start_cy, start_cx]))
+
+    cells = astar((start_cy, start_cx), (goal_cy, goal_cx), lethal,
+                  connectivity=8, max_expansions=20000)
     if cells is None:
         return None, lethal
     pruned = prune_line_of_sight(cells, lethal)
     return to_reference_path(pruned, (grid.origin_x, grid.origin_y), grid.s, resample_ds=grid.s), lethal
 
-def navigate(sensors, grid, ekf, goal_xy, params,
+def navigate(sensors, grid, ekf, goal_xy, params, dt=0.02,
              goal_tol=0.10, max_cycles=10000, use_covariance=True):
     """
     Run until the goal is reached, the route is gone, or the cycle budget runs out.
@@ -93,23 +123,54 @@ def navigate(sensors, grid, ekf, goal_xy, params,
     stall_events = 0
     log = []
 
+    prev_pts = None          # body-frame points of the last completed scan
+    x_at_prev_scan = None    # nominal state when that scan was taken
+    prev_seq = -1
+
     for cycle in range(max_cycles):
 
         # 1. SENSE
-        imu, encoder, scan = sensors.read()
+        (a_m, w_m), encoder, (scan_angles, scan_ranges), scan_seq = sensors.read()
 
-        # 2. ESTIMATE -- before mapping, or the scan is integrated at a stale pose
-        #    ekf.predict(a_m, w_m, dt, g)
-        #    enc_ok = ekf.update_encoder(v_body_meas)
-        #    icp_ok = ekf.update_icp(rel_pose_meas, R_icp, x_prev)
-        #    the bool is the chi-squared gate: a rejected ICP update is the
-        #    wheel-slip signal (encoders and scan matching disagree) -- log it
+        # 2. ESTIMATE -- must precede mapping, or the scan is laid down at a
+        #    stale pose and every wall gets smeared
+        ekf.predict(a_m, w_m, dt, G_WORLD)
+        enc_ok = ekf.update_encoder(encoder)
+
+        # ICP only on a NEW revolution. Matching a scan against itself would
+        # report zero motion and fight the IMU eight cycles out of nine.
+        icp_ok = None
+        scan_is_new = scan_seq != prev_seq
+        if scan_is_new:
+            cur_pts = polar_to_body(scan_angles, scan_ranges)
+            if prev_pts is not None and len(cur_pts) > 10 and len(prev_pts) > 10:
+                # initial guess: the motion the filter has already propagated
+                R_prev = quat_to_rot(x_at_prev_scan.q)
+                dp = R_prev.T @ (ekf.x.p - x_at_prev_scan.p)
+                dyaw = (np.arctan2(quat_to_rot(ekf.x.q)[1, 0], quat_to_rot(ekf.x.q)[0, 0])
+                        - np.arctan2(R_prev[1, 0], R_prev[0, 0]))
+                # source = current, reference = previous, so (phi, t) IS the
+                # motion of the current frame expressed in the previous frame
+                phi, t, cov, icp_info = icp_scan_match(cur_pts, prev_pts,
+                                                       init_phi=dyaw,
+                                                       init_t=(dp[0], dp[1]))
+                if icp_info["converged"]:
+                    rel = np.array([t[0], t[1], phi])
+                    icp_ok = ekf.update_icp(rel, cov + R_ICP_FLOOR, x_at_prev_scan)
+                else:
+                    icp_ok = False
+            prev_pts = cur_pts
+            x_at_prev_scan = copy.deepcopy(ekf.x)
+            prev_seq = scan_seq
+
         p_xy, yaw, P3 = ekf.pose_with_covariance()
         pose = np.array([p_xy[0], p_xy[1], yaw])
-        gates = ...          # (enc_ok, icp_ok)
+        gates = (enc_ok, icp_ok)
 
-        # 3. MAP -- integrate this scan at the pose just estimated
-        grid.integrate_scan(pose, scan_angles, scan_ranges)
+        # 3. MAP -- only on a new revolution; re-laying the same scan nine times
+        #    just re-saturates the same cells
+        if scan_is_new:
+            grid.integrate_scan(pose, scan_angles, scan_ranges)
 
         # 4. REPLAN?  build the costmap once, use it for both the check and A*
         need = (path is None

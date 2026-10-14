@@ -90,7 +90,7 @@ def astar(start_cell, goal_cell, lethal_mask, cost_field=None, connectivity=8, m
     connectivity            4 or 8, must match the heuristic
     returns                 list of (r, c) from start to goal inclusive, or None
     """
-    if lethal_mask[start_cell] or lethal_mask[goal_cell]:
+    if lethal_mask[goal_cell]:
         return None
 
     g_score = {start_cell: 0.0}
