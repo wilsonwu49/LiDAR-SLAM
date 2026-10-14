@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from movement.obstacles import scan_to_obstacles
+from movement.obstacles import scan_to_obstacles, grid_to_obstacles
 from movement.pure_pursuit import pure_pursuit_command
 from movement.safety_filter_qp import safety_filter
 
@@ -30,7 +30,7 @@ class ControlParams:
     n_sectors       angular wedges in the scan reduction
     """
     r_robot: float = 0.15
-    r_safety: float = 0.15
+    r_safety: float = 0.18
     R: float = 0.25
     ell: float = 0.05
     alpha_gain: float = 1.0
@@ -44,14 +44,27 @@ class ControlParams:
     wheelbase: float = 0.2
     n_sectors: int = 36
 
+    # A* measures clearance cell-centre to cell-centre, the CBF measures it in
+    # metres. An occupied cell is a square, so its surface can be half a cell
+    # nearer than its centre -- the planner must beat the CBF by at least that
+    # much or it will hand over paths the filter refuses to drive.
+    grid_resolution: float = 0.05
+
     def __post_init__(self):
-        # the planner must be more conservative than the reactive layer, or the
-        # CBF fights A* over obstacles the planner already routed around
-        if self.r_robot + self.r_safety < self.R + self.ell:
+        inflation = self.r_robot + self.r_safety
+        reach = self.R + self.ell
+        required = reach + 0.5 * self.grid_resolution
+        if inflation < required:
             raise ValueError(
-                f"planner inflation {self.r_robot + self.r_safety:.3f} m is smaller "
-                f"than CBF reach {self.R + self.ell:.3f} m; the filter will brake "
-                f"on walls A* considers clear")
+                f"planner inflation {inflation:.3f} m must be at least "
+                f"{required:.3f} m = CBF reach {reach:.3f} m + half a cell "
+                f"({0.5 * self.grid_resolution:.3f} m of discretization slack); "
+                f"otherwise A* hands over paths the filter brakes on")
+
+    @property
+    def planner_slack(self):
+        """Metres by which the planner out-reserves the CBF."""
+        return (self.r_robot + self.r_safety) - (self.R + self.ell)
 
     @property
     def d_gate(self):
@@ -59,23 +72,23 @@ class ControlParams:
         return self.R + self.v_max / self.alpha_gain
 
 
-def control_step(pose, P, path, ranges, bearings, params):
+def control_step(pose, P, path, grid, params):
     """
     One control cycle: nominal command from the path, then projected onto the safe set.
 
     pose      (3,) [x, y, theta] in the map frame, from the EKF
     P         (3,3) pose covariance, or None to use the fixed radius
     path      (K, 2) reference path in the map frame, from Module 4
-    ranges    (N,) scan ranges [m]
-    bearings  (N,) scan bearings in the body frame [rad]
+    grid      OccupancyGridMap from Module 3; the obstacle source
     params    ControlParams
 
     returns
       u      (2,) [v, omega] to send to the motors
       info   dict from safety_filter, plus n_obstacles and the carrot
     """
-    # 1. scan_to_obstacles(...) with params.d_gate and params.n_sectors
-    # 2. pure_pursuit_command(...) -> u_nom, carrot
-    # 3. safety_filter(u_nom, ...) -> u, info      (pass P and params.k)
-    # 4. add n_obstacles and carrot to info, return
-    ...
+    obstacles = grid_to_obstacles(grid, pose, params.d_gate, params.n_sectors)
+    u_nom, carrot = pure_pursuit_command(pose, path, params.v_desired, params.lookahead_gain, params.L_min, params.L_max, params.wheelbase)
+    u, info = safety_filter(u_nom, pose, obstacles, params.v_max, params.omega_max, params.R, params.ell, params.alpha_gain, P=P, k=params.k)
+    info['n_obstacles'] = obstacles.shape[0]
+    info['carrot'] = carrot
+    return u, info

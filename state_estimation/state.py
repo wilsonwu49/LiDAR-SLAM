@@ -1,5 +1,6 @@
 import numpy as np
 from dataclasses import dataclass
+from state_estimation.quaternion import quat_to_rot
 
 @dataclass
 class NominalState:
@@ -24,3 +25,17 @@ IDX = dict(dp=slice(0,3),
            dth=slice(6,9), 
            dab=slice(9,12), 
            dwb=slice(12,15))
+
+POSE2D_IDX = [0, 1, 8]        # x, y, yaw
+
+def pose2d_from_ekf(x, P15):
+    """Map-frame [x, y, theta] and its 3x3 covariance, sliced from the 15-dim filter.
+
+    x     NominalState
+    P15   (15,15) error-state covariance
+    """
+    Rwb = quat_to_rot(x.q)
+    theta = np.arctan2(Rwb[1, 0], Rwb[0, 0])
+    pose = np.array([x.p[0], x.p[1], theta])
+    P3 = P15[np.ix_(POSE2D_IDX, POSE2D_IDX)]
+    return pose, P3
