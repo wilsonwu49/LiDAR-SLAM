@@ -25,7 +25,6 @@ def fixed_radius_cbf_constraint(pose, obstacle_xy, R, ell, alpha_gain):
     # 4. a_v = e_hat . [ cos th,  sin th ]
     # 5. a_w = ell * ( e_hat . [ -sin th, cos th ] )
     # 6. return np.array([-a_v, -a_w]), alpha_gain * h, h
-    ...
 
     feeler = np.array([pose[0] + ell * np.cos(pose[2]), pose[1] + ell * np.sin(pose[2])]) # extended point
     e = feeler - obstacle_xy # error from extended vs obstacle
@@ -33,5 +32,7 @@ def fixed_radius_cbf_constraint(pose, obstacle_xy, R, ell, alpha_gain):
     h = d - R # difference between distance and safe radius
     e_norm = e / d if d > 1e-9 else np.zeros_like(e) # normalized error vector
     a_v = e_norm @ np.array([np.cos(pose[2]), np.sin(pose[2])]) # how much velocity is pointing towards the obstacle
-    a_w = ell * (e_norm @ np.array([-np.sin(pose[2]), np.cos(pose[2])])) # how much angular velocity is pointing towards the obstacle
+    # turning swings the feeler sideways at ell*omega; this is how much of that
+    # motion lies along the escape direction (ell is the lever arm)
+    a_w = ell * (e_norm @ np.array([-np.sin(pose[2]), np.cos(pose[2])]))
     return np.array([-a_v, -a_w]), alpha_gain * h, h

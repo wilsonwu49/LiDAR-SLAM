@@ -23,4 +23,16 @@ def uncertainty_margin(pose, P, obstacle_xy, k, ell=0.0):
     # 4. return k * sigma_los
     #
     # read E.2 for the derivation -- the projection is the whole content
-    ...
+    feeler = np.array([pose[0] + ell * np.cos(pose[2]), pose[1] + ell * np.sin(pose[2])])
+    e = feeler - obstacle_xy
+    d = np.linalg.norm(e)
+    if d < 1e-9:
+        return 0.0
+    e_norm = e / d
+
+    J = np.array([e_norm[0], e_norm[1], ell * (e_norm @ np.array([-np.sin(pose[2]), np.cos(pose[2])]))])
+    sigma_los = np.sqrt(J @ P @ J.T)
+    return k * sigma_los
+
+
+
