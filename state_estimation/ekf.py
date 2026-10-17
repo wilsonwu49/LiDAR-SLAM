@@ -57,6 +57,41 @@ class ESEKF:
         self.x, self.P = inject_and_reset(self.x, dx_hat, P_plus)
         return True
 
+    def update_icp_rates(self, v_body_xy: np.ndarray, yaw_rate_meas: float,
+                         w_m: np.ndarray, R_v: np.ndarray) -> bool:
+        """NIS-gate, then correct from ICP read as a velocity AND turn-rate sensor.
+
+        v_body_xy:     body-frame planar velocity from scan displacement / dt, (2,)
+        yaw_rate_meas: scan-to-scan rotation / dt [rad/s]
+        w_m:           the latest raw gyro reading, (3,)
+        R_v:           3x3 covariance of [vx, vy, yaw_rate]
+        returns:       True if accepted, False if rejected by the NIS gate.
+
+        Scan matching measures CHANGE, never absolute pose, so both channels are
+        fed as rates. The velocity rows constrain self.x.v; the yaw-rate row
+        compares ICP against the gyro and books the disagreement to the gyro bias
+        w_b -- the only state that can explain it. That keeps the gyro calibrated,
+        which is what slows heading drift and keeps the CBF margin usable.
+
+        It does NOT claim to know absolute heading or position. Those still drift,
+        correctly, for a robot with no loop closure.
+        """
+        h2, H2 = encoder_h_and_H(self.x)
+
+        h = np.array([h2[0], h2[1], (w_m - self.x.w_b)[2]])
+        H = np.zeros((3, 15))
+        H[:2, :] = H2[:2, :]
+        H[2, IDX['dwb'].start + 2] = -1.0       # d/d(gyro bias z) of (w_m - w_b)_z
+
+        y = np.array([v_body_xy[0], v_body_xy[1], yaw_rate_meas]) - h
+        S = H @ self.P @ H.T + R_v
+        if nis(y, S) > chi2.ppf(0.99, df=3):
+            return False
+
+        dx_hat, P_plus = kalman_update(self.P, H, R_v, y)
+        self.x, self.P = inject_and_reset(self.x, dx_hat, P_plus)
+        return True
+
     def update_icp(self, rel_pose_meas: np.ndarray, R_icp: np.ndarray, x_prev: NominalState) -> bool:
         R_prev = quat_to_rot(x_prev.q)
         dp_predicted = R_prev.T @ (self.x.p - x_prev.p)

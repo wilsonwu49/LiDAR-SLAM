@@ -1,6 +1,11 @@
 import numpy as np
 
-COV_INFLATION = 16.0   # see note below; calibrate against NEES, do not guess
+# Kept as a knob, but 1.0 means no fudge factor. It was introduced when ICP was
+# fused as an absolute pose measurement, where the Gauss-Newton covariance was
+# ~16x too small. Once ICP is fused as a rate (see ESEKF.update_icp_rates) the
+# filter's consistency is insensitive to it anywhere from 1 to 64, so it is set
+# to 1 rather than carry an unexplained constant.
+COV_INFLATION = 1.0
 
 
 def icp_pose_covariance(A: np.ndarray, weights: np.ndarray, residuals: np.ndarray,

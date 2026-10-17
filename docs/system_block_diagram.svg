@@ -1,0 +1,189 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1010" width="1000" height="1010" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="a" markerWidth="9" markerHeight="9" refX="7.5" refY="3.2" orient="auto">
+      <path d="M0,0 L8,3.2 L0,6.4 z" fill="#5b6472"/>
+    </marker>
+    <marker id="ao" markerWidth="9" markerHeight="9" refX="7.5" refY="3.2" orient="auto">
+      <path d="M0,0 L8,3.2 L0,6.4 z" fill="#b08900"/>
+    </marker>
+  </defs>
+  <style>
+    .box  { rx:8; stroke-width:1.6; }
+    .m1   { fill:#eef4fb; stroke:#2f6ea8; }
+    .m2   { fill:#eef7f1; stroke:#2f8a5b; }
+    .m3   { fill:#fdf3ea; stroke:#c2622a; }
+    .m4   { fill:#f6f0fa; stroke:#7b4fa3; }
+    .m5   { fill:#fdeff1; stroke:#b23a52; }
+    .sens { fill:#f2f3f5; stroke:#5b6472; }
+    .out  { fill:#333a45; stroke:#333a45; }
+    .t    { font-size:14.5px; font-weight:600; fill:#1d2129; }
+    .s    { font-size:11.5px; fill:#5b6472; }
+    .w    { font-size:15px; font-weight:600; fill:#ffffff; }
+    .lbl  { font-size:11px; fill:#5b6472; font-style:italic; }
+    .rate { font-size:10.5px; font-weight:700; fill:#949ba6; }
+    .hdr  { font-size:11.5px; font-weight:700; letter-spacing:1.3px; }
+    .ln   { stroke:#5b6472; stroke-width:1.6; fill:none; marker-end:url(#a); }
+    .lno  { stroke:#b08900; stroke-width:1.6; fill:none; marker-end:url(#ao); stroke-dasharray:5 4; }
+    .lane { fill:none; stroke:#dfe3e8; stroke-width:1.2; stroke-dasharray:4 5; rx:10; }
+  </style>
+
+  <text x="30" y="38" font-size="20" font-weight="700" fill="#1d2129">LiDAR Navigation Robot — software architecture</text>
+  <text x="30" y="59" class="s">Five modules on three clocks. Everything below the sensor row runs on the Raspberry Pi.</text>
+
+  <!-- SENSORS -->
+  <text x="30" y="96" class="hdr" fill="#5b6472">SENSORS</text>
+  <rect class="box sens" x="30"  y="106" width="190" height="52"/>
+  <text x="44" y="128" class="t">IMU — BMI270</text>
+  <text x="44" y="146" class="s">specific force, angular rate</text>
+  <text x="196" y="100" class="rate">200 Hz</text>
+
+  <rect class="box sens" x="244" y="106" width="190" height="52"/>
+  <text x="258" y="128" class="t">Wheel encoders</text>
+  <text x="258" y="146" class="s">body-frame velocity</text>
+  <text x="414" y="100" class="rate">50 Hz</text>
+
+  <rect class="box sens" x="458" y="106" width="190" height="52"/>
+  <text x="472" y="128" class="t">RPLIDAR A1M8</text>
+  <text x="472" y="146" class="s">1080 beams / rev</text>
+  <text x="620" y="100" class="rate">5.5 Hz</text>
+
+  <!-- ESTIMATION -->
+  <rect class="lane" x="20" y="212" width="640" height="118"/>
+  <text x="34" y="232" class="hdr" fill="#2f6ea8">ESTIMATION</text>
+  <rect class="box m1" x="172" y="242" width="210" height="60"/>
+  <text x="186" y="264" class="t">1 · Error-State EKF</text>
+  <text x="186" y="281" class="s">15 states, Joseph form</text>
+  <text x="186" y="296" class="s">χ² gate on every update</text>
+
+  <rect class="box m2" x="458" y="242" width="190" height="60"/>
+  <text x="472" y="264" class="t">2 · PL-ICP</text>
+  <text x="472" y="281" class="s">scan t vs scan t−1</text>
+  <text x="472" y="296" class="s">point-to-line, trimmed</text>
+
+  <!-- MAPPING -->
+  <rect class="lane" x="690" y="212" width="290" height="118"/>
+  <text x="704" y="232" class="hdr" fill="#c2622a">MAPPING</text>
+  <rect class="box m3" x="704" y="242" width="200" height="60"/>
+  <text x="718" y="264" class="t">3 · Occupancy grid</text>
+  <text x="718" y="281" class="s">log-odds, Bresenham</text>
+  <text x="718" y="296" class="s">200 × 200 @ 5 cm</text>
+
+  <!-- PLANNING -->
+  <rect class="lane" x="690" y="396" width="290" height="268"/>
+  <text x="704" y="416" class="hdr" fill="#7b4fa3">PLANNING &#160;&#160;2 Hz</text>
+  <rect class="box m4" x="704" y="426" width="200" height="54"/>
+  <text x="718" y="448" class="t">Costmap</text>
+  <text x="718" y="465" class="s">inflate r_robot + r_safety</text>
+
+  <rect class="box m4" x="704" y="506" width="200" height="54"/>
+  <text x="718" y="528" class="t">4 · A* search</text>
+  <text x="718" y="545" class="s">8-connected, capped</text>
+
+  <rect class="box m4" x="704" y="586" width="200" height="54"/>
+  <text x="718" y="608" class="t">Prune + resample</text>
+  <text x="718" y="625" class="s">string-pull, 5 cm</text>
+
+  <!-- CONTROL -->
+  <rect class="lane" x="20" y="396" width="640" height="470"/>
+  <text x="34" y="416" class="hdr" fill="#b23a52">CONTROL &#160;&#160;50 Hz</text>
+
+  <rect class="box m5" x="34" y="432" width="236" height="60"/>
+  <text x="48" y="454" class="t">5A · Pure pursuit</text>
+  <text x="48" y="471" class="s">carrot at lookahead L_d</text>
+  <text x="48" y="486" class="s">γ = 2·y_L / L_d²</text>
+
+  <rect class="box m3" x="400" y="432" width="236" height="60"/>
+  <text x="414" y="454" class="t">Obstacle extraction</text>
+  <text x="414" y="471" class="s">gate at R + v_max/γ</text>
+  <text x="414" y="486" class="s">nearest per 10° wedge</text>
+
+  <rect class="box m5" x="176" y="550" width="212" height="60"/>
+  <text x="190" y="572" class="t">5D · CBF constraint</text>
+  <text x="190" y="589" class="s">h = d − R, feeler at ℓ</text>
+  <text x="190" y="604" class="s">one row per obstacle</text>
+
+  <rect class="box m5" x="412" y="550" width="212" height="60"/>
+  <text x="426" y="572" class="t">5E · Uncertainty margin</text>
+  <text x="426" y="589" class="s">σ_los = √(J P Jᵀ)</text>
+  <text x="426" y="604" class="s">R_eff = R + k·σ_los</text>
+
+  <rect class="box m5" x="140" y="676" width="400" height="64"/>
+  <text x="154" y="699" class="t">5C · Safety filter — QP</text>
+  <text x="154" y="716" class="s">min ‖u − u_nom‖²  s.t.  G u ≤ h,  |v| ≤ v_max,  |ω| ≤ ω_max</text>
+  <text x="154" y="732" class="s">2 variables · ≤ 36 rows · 30 µs · infeasible ⇒ stop</text>
+
+  <rect class="box out" x="220" y="790" width="240" height="48"/>
+  <text x="236" y="820" class="w">Motors  (v, ω) → wheels</text>
+
+  <!-- SUPERVISOR -->
+  <rect class="box" x="704" y="700" width="200" height="138" fill="#fffbe9" stroke="#b08900"/>
+  <text x="718" y="724" class="t">Supervisor</text>
+  <text x="718" y="745" class="s">replan when the path is</text>
+  <text x="718" y="762" class="s">blocked, every 0.5 s,</text>
+  <text x="718" y="779" class="s">after 25 stalled cycles,</text>
+  <text x="718" y="796" class="s">or if the QP is infeasible.</text>
+  <text x="718" y="820" class="s">No route ⇒ report blocked.</text>
+
+  <!-- ARROWS: sensors -> estimation -->
+  <path class="ln" d="M125,158 L125,196 L212,196 L212,236"/>
+  <path class="ln" d="M339,158 L339,196 L300,196 L300,236"/>
+  <path class="ln" d="M553,158 L553,236"/>
+  <text x="130" y="188" class="lbl">a_m, w_m</text>
+  <text x="346" y="188" class="lbl">v_body</text>
+  <text x="560" y="188" class="lbl">angles, ranges</text>
+
+  <!-- ICP -> EKF -->
+  <path class="ln" d="M458,272 L388,272"/>
+  <text x="452" y="320" class="lbl" text-anchor="end">Δpose + 3×3 covariance</text>
+
+  <!-- LiDAR -> grid -->
+  <path class="ln" d="M648,132 L804,132 L804,236"/>
+
+  <!-- EKF pose -> grid -->
+  <path class="ln" d="M382,258 L676,258 L676,262 L698,262"/>
+  <text x="560" y="252" class="lbl">pose</text>
+
+  <!-- grid -> planning chain -->
+  <path class="ln" d="M804,302 L804,426"/>
+  <path class="ln" d="M804,480 L804,506"/>
+  <path class="ln" d="M804,560 L804,586"/>
+
+  <!-- grid -> obstacle extraction -->
+  <path class="ln" d="M904,272 L944,272 L944,376 L518,376 L518,426"/>
+  <text x="528" y="370" class="lbl">occupied cells within the gate</text>
+
+  <!-- prune -> pure pursuit -->
+  <path class="ln" d="M704,614 L672,614 L672,352 L152,352 L152,426"/>
+  <text x="160" y="346" class="lbl">reference path (map frame)</text>
+
+  <!-- EKF -> control lane -->
+  <path class="ln" d="M277,302 L277,426"/>
+  <text x="284" y="398" class="lbl">pose + 3×3 P  (also feeds 5D and 5E)</text>
+
+  <!-- pure pursuit -> QP, clear channel on the left -->
+  <path class="ln" d="M70,492 L70,708 L134,708"/>
+  <text x="76" y="600" class="lbl">u_nom</text>
+
+  <!-- obstacles -> CBF and margin -->
+  <path class="ln" d="M518,492 L518,524 L282,524 L282,544"/>
+  <path class="ln" d="M518,492 L518,544"/>
+  <text x="300" y="518" class="lbl">obstacle points</text>
+
+  <!-- CBF + margin -> QP -->
+  <path class="ln" d="M282,610 L282,670"/>
+  <text x="290" y="650" class="lbl">G, h</text>
+  <path class="ln" d="M518,610 L518,650 L400,650 L400,670"/>
+
+  <!-- QP -> motors -->
+  <path class="ln" d="M340,740 L340,784"/>
+  <text x="348" y="770" class="lbl">u*</text>
+
+  <!-- supervisor loop -->
+  <path class="lno" d="M540,712 L620,712 L620,760 L698,760"/>
+  <text x="548" y="706" class="lbl" fill="#b08900">status, h_min, stalls</text>
+  <path class="lno" d="M790,700 L790,664"/>
+
+  <text x="30" y="900" class="s">Solid arrows carry data. Dashed arrows are the supervisor: it is the only part that can find a detour — the QP can only slow down or nudge.</text>
+  <text x="30" y="922" class="s">Clocks: 200 Hz EKF predict · 50 Hz control + QP · 5.5 Hz ICP and mapping · 2 Hz replanning. The expensive stages sit on the slow clocks deliberately.</text>
+  <text x="30" y="944" class="s">Known gap: the EKF treats ICP's relative measurement as an absolute fix, so P is overconfident and 5E's margin is smaller than it should be.</text>
+</svg>

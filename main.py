@@ -15,13 +15,13 @@ from astar.path import prune_line_of_sight, to_reference_path
 from icp.icp import icp_scan_match
 from movement.controller import control_step
 from state_estimation.quaternion import quat_to_rot
-from state_estimation.state import POSE2D_IDX
 
 STALL_SPEED = 0.02        # m/s; below this the robot is not making progress
 STALL_STEPS = 25          # consecutive stalled steps before declaring blocked
 REPLAN_PERIOD = 25        # cycles between routine replans (25 @ 50 Hz = 0.5 s)
 G_WORLD = np.array([0.0, 0.0, -9.80665])   # sign matches a_true = R(a_m - b) + g
-R_ICP_FLOOR = np.diag([1e-6, 1e-6, 1e-7])  # numerical floor only; ICP owns the real number
+RATE_FLOOR = 0.005        # m/s and rad/s; residual model error, so a perfectly
+                          # steady interval still cannot claim infinite precision
 
 
 def polar_to_body(angles, ranges):
@@ -131,7 +131,8 @@ def navigate(sensors, grid, ekf, goal_xy, params, dt=0.02,
 
     prev_pts = None          # body-frame points of the last completed scan
     x_at_prev_scan = None    # nominal state when that scan was taken
-    P_after_prev_scan = None # pose covariance just after that scan's update
+    cycle_at_prev_scan = 0   # for the interval the displacement was measured over
+    w_m_at_prev_scan = None  # for the angular-acceleration estimate
     prev_seq = -1
 
     for cycle in range(max_cycles):
@@ -161,27 +162,40 @@ def navigate(sensors, grid, ekf, goal_xy, params, dt=0.02,
                 phi, t, cov, icp_info = icp_scan_match(cur_pts, prev_pts,
                                                        init_phi=dyaw,
                                                        init_t=(dp[0], dp[1]))
+                dt_scan = max(cycle - cycle_at_prev_scan, 1) * dt
                 if icp_info["converged"]:
-                    rel = np.array([t[0], t[1], phi])
-                    # ICP measures the motion SINCE the last scan, so it is only
-                    # as good as the filter's knowledge of where it started.
-                    # update_icp treats x_prev as exact, which would shrink P as
-                    # though this were an absolute fix. Charging the drift
-                    # accumulated between the two scans to R restores the
-                    # distinction between odometry and localisation.
-                    drift = np.zeros((3, 3))
-                    if P_after_prev_scan is not None:
-                        d = ekf.P[np.ix_(POSE2D_IDX, POSE2D_IDX)] - P_after_prev_scan
-                        d = 0.5 * (d + d.T)
-                        w, V = np.linalg.eigh(d)
-                        drift = V @ np.diag(np.maximum(w, 0.0)) @ V.T   # keep it PSD
-                    icp_ok = ekf.update_icp(rel, cov + drift + R_ICP_FLOOR,
-                                            x_at_prev_scan)
+                    # ICP measured a DISPLACEMENT over dt_scan, expressed in the
+                    # previous body frame. Rotate it into the current frame and
+                    # divide by the interval: that is a velocity, which is what
+                    # scan matching can honestly bound. Feeding it as a position
+                    # fix would shrink P against a starting point that was itself
+                    # uncertain, which is what made the filter overconfident.
+                    c, s = np.cos(-phi), np.sin(-phi)
+                    T = np.array([[c, -s, 0.0],
+                                  [s,  c, 0.0],
+                                  [0.0, 0.0, 1.0]]) / dt_scan   # rotate, then /dt
+                    rates = T @ np.array([t[0], t[1], phi])     # [vx, vy, yaw_rate]
+                    R_v = T @ cov @ T.T
+
+                    # ICP reports the AVERAGE rate over dt_scan; the filter holds
+                    # the instantaneous one. For constant acceleration the gap is
+                    # |a| * dt / 2 -- and a is measured, so this is derived rather
+                    # than tuned: zero at cruise, large while accelerating.
+                    a_body_xy = (a_m - ekf.x.a_b)[:2]
+                    s_chord = 0.5 * np.linalg.norm(a_body_xy) * dt_scan + RATE_FLOOR
+                    if w_m_at_prev_scan is None:
+                        s_yaw = RATE_FLOOR
+                    else:
+                        # angular acceleration from the gyro difference, same form
+                        s_yaw = 0.5 * abs(w_m[2] - w_m_at_prev_scan[2]) + RATE_FLOOR
+                    R_v = R_v + np.diag([s_chord ** 2, s_chord ** 2, s_yaw ** 2])
+                    icp_ok = ekf.update_icp_rates(rates[:2], rates[2], w_m, R_v)
                 else:
                     icp_ok = False
             prev_pts = cur_pts
             x_at_prev_scan = copy.deepcopy(ekf.x)
-            P_after_prev_scan = ekf.P[np.ix_(POSE2D_IDX, POSE2D_IDX)].copy()
+            cycle_at_prev_scan = cycle
+            w_m_at_prev_scan = w_m.copy()
             prev_seq = scan_seq
 
         p_xy, yaw, P3 = ekf.pose_with_covariance()
