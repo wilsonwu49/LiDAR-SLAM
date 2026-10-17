@@ -15,12 +15,13 @@ from astar.path import prune_line_of_sight, to_reference_path
 from icp.icp import icp_scan_match
 from movement.controller import control_step
 from state_estimation.quaternion import quat_to_rot
+from state_estimation.state import POSE2D_IDX
 
 STALL_SPEED = 0.02        # m/s; below this the robot is not making progress
 STALL_STEPS = 25          # consecutive stalled steps before declaring blocked
 REPLAN_PERIOD = 25        # cycles between routine replans (25 @ 50 Hz = 0.5 s)
 G_WORLD = np.array([0.0, 0.0, -9.80665])   # sign matches a_true = R(a_m - b) + g
-R_ICP_FLOOR = np.diag([1e-4, 1e-4, 1e-5])  # keeps ICP's own cov from going singular
+R_ICP_FLOOR = np.diag([1e-6, 1e-6, 1e-7])  # numerical floor only; ICP owns the real number
 
 
 def polar_to_body(angles, ranges):
@@ -77,6 +78,11 @@ def plan(grid, pose, goal_xy, params, occ_threshold=0.85):
     start_cx, start_cy = grid.world_to_cell(pose[0], pose[1])
     goal_cx, goal_cy = grid.world_to_cell(goal_xy[0], goal_xy[1])
 
+    # Bounds first: astar indexes lethal_mask directly and would raise IndexError
+    # on a goal outside the map.
+    if not (grid.in_bounds(start_cx, start_cy) and grid.in_bounds(goal_cx, goal_cy)):
+        return None, lethal
+
     # The robot may legally sit inside the inflation band: it is wider than the
     # CBF's reach by design (params.planner_slack). A* cannot expand out of a
     # lethal region because `neighbors` refuses to enter lethal cells, so plan
@@ -125,6 +131,7 @@ def navigate(sensors, grid, ekf, goal_xy, params, dt=0.02,
 
     prev_pts = None          # body-frame points of the last completed scan
     x_at_prev_scan = None    # nominal state when that scan was taken
+    P_after_prev_scan = None # pose covariance just after that scan's update
     prev_seq = -1
 
     for cycle in range(max_cycles):
@@ -156,11 +163,25 @@ def navigate(sensors, grid, ekf, goal_xy, params, dt=0.02,
                                                        init_t=(dp[0], dp[1]))
                 if icp_info["converged"]:
                     rel = np.array([t[0], t[1], phi])
-                    icp_ok = ekf.update_icp(rel, cov + R_ICP_FLOOR, x_at_prev_scan)
+                    # ICP measures the motion SINCE the last scan, so it is only
+                    # as good as the filter's knowledge of where it started.
+                    # update_icp treats x_prev as exact, which would shrink P as
+                    # though this were an absolute fix. Charging the drift
+                    # accumulated between the two scans to R restores the
+                    # distinction between odometry and localisation.
+                    drift = np.zeros((3, 3))
+                    if P_after_prev_scan is not None:
+                        d = ekf.P[np.ix_(POSE2D_IDX, POSE2D_IDX)] - P_after_prev_scan
+                        d = 0.5 * (d + d.T)
+                        w, V = np.linalg.eigh(d)
+                        drift = V @ np.diag(np.maximum(w, 0.0)) @ V.T   # keep it PSD
+                    icp_ok = ekf.update_icp(rel, cov + drift + R_ICP_FLOOR,
+                                            x_at_prev_scan)
                 else:
                     icp_ok = False
             prev_pts = cur_pts
             x_at_prev_scan = copy.deepcopy(ekf.x)
+            P_after_prev_scan = ekf.P[np.ix_(POSE2D_IDX, POSE2D_IDX)].copy()
             prev_seq = scan_seq
 
         p_xy, yaw, P3 = ekf.pose_with_covariance()
@@ -198,6 +219,7 @@ def navigate(sensors, grid, ekf, goal_xy, params, dt=0.02,
         # 7. BOOKKEEP
         info["cycle"] = cycle
         info["pose"] = pose.copy()
+        info["P3"] = P3.copy()          # for NEES: is the filter's confidence honest?
         info["gates"] = gates
         log.append(info)
 

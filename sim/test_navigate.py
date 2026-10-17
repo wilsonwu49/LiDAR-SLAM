@@ -102,34 +102,35 @@ def report(name, res):
     return c
 
 
-ok = True
-print()
-print("A. open room, diagonal traverse")
-rA = run(OPEN_ROOM, [2.0, 2.0, 0.0], [8.0, 8.0])
-cA = report("open room", rA)
-ok &= rA["outcome"] == "reached" and cA.min() > 0
+if __name__ == "__main__":
+    ok = True
+    print()
+    print("A. open room, diagonal traverse")
+    rA = run(OPEN_ROOM, [2.0, 2.0, 0.0], [8.0, 8.0])
+    cA = report("open room", rA)
+    ok &= rA["outcome"] == "reached" and cA.min() > 0
 
-print()
-print("B. interior wall with a 1.2 m doorway -- must route through it")
-rB = run(ROOM, [2.0, 5.0, 0.0], [8.0, 5.0])
-cB = report("doorway", rB)
-ok &= rB["outcome"] == "reached" and cB.min() > 0
+    print()
+    print("B. interior wall with a 1.2 m doorway -- must route through it")
+    rB = run(ROOM, [2.0, 5.0, 0.0], [8.0, 5.0])
+    cB = report("doorway", rB)
+    ok &= rB["outcome"] == "reached" and cB.min() > 0
 
-print()
-print("C. same, fixed-radius baseline (Part F control condition)")
-rC = run(ROOM, [2.0, 5.0, 0.0], [8.0, 5.0], use_covariance=False)
-cC = report("doorway, P = None", rC)
+    print()
+    print("C. same, fixed-radius baseline (Part F control condition)")
+    rC = run(ROOM, [2.0, 5.0, 0.0], [8.0, 5.0], use_covariance=False)
+    cC = report("doorway, P = None", rC)
 
-print()
-print("D. 15% wheel slip -- the ICP gate should notice")
-rD = run(ROOM, [2.0, 5.0, 0.0], [8.0, 5.0], slip=0.15)
-cD = report("doorway, 15% slip", rD)
+    print()
+    print("D. 15% wheel slip -- the ICP gate should notice")
+    rD = run(ROOM, [2.0, 5.0, 0.0], [8.0, 5.0], slip=0.15)
+    cD = report("doorway, 15% slip", rD)
 
-print()
-print("comparison (B vs C): uncertainty-aware vs fixed radius")
-print(f"    min clearance   {cB.min()*1000:7.1f} mm   vs {cC.min()*1000:7.1f} mm")
-print(f"    cycles to goal  {rB['cycles']:7d}      vs {rC['cycles']:7d}")
+    print()
+    print("comparison (B vs C): uncertainty-aware vs fixed radius")
+    print(f"    min clearance   {cB.min()*1000:7.1f} mm   vs {cC.min()*1000:7.1f} mm")
+    print(f"    cycles to goal  {rB['cycles']:7d}      vs {rC['cycles']:7d}")
 
-print()
-print("END TO END", "PASSED" if ok else "FAILED")
-print()
+    print()
+    print("END TO END", "PASSED" if ok else "FAILED")
+    print()

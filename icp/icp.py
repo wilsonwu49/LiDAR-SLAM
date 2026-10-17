@@ -9,7 +9,7 @@ from icp.icp_ekf import icp_pose_covariance
 
 
 def icp_scan_match(source_pts, reference_pts, init_phi=0.0, init_t=(0.0, 0.0),
-                   max_iterations=30, tol_t=1e-3, tol_phi=1e-4, d_max=0.3, k_normals=8):
+                   max_iterations=30, tol_t=1e-3, tol_phi=1e-4, d_max=0.3, k_normals=32):
     """Full point-to-line ICP for two 2D scans.
 
     Returns
@@ -56,6 +56,18 @@ def icp_scan_match(source_pts, reference_pts, init_phi=0.0, init_t=(0.0, 0.0),
             converged = True
             break
         prev_cost = cost
+
+    # Re-evaluate at the CONVERGED pose. Inside the loop, matched_src/residuals
+    # are built before the final solve step, so using them here would describe
+    # the pose from one iteration ago.
+    final_src = transform_points(source_pts, phi, t)
+    idx, _ = corr.query(final_src, max_dist=d_max)
+    valid = idx != -1
+    matched_src = final_src[valid]
+    matched_dst = reference_pts[idx[valid]]
+    matched_normals = normals[idx[valid]]
+    residuals = np.sum(matched_normals * (matched_src - matched_dst), axis=1)
+    weights = trim_correspondences(residuals, 0.8)
 
     A = np.array([matched_normals[:,0], matched_normals[:,1],
                   -matched_normals[:,0]*matched_src[:,1] + matched_normals[:,1]*matched_src[:,0]]).T
