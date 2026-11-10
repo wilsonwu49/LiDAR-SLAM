@@ -1,0 +1,11 @@
+# robot code
+numpy>=1.24
+scipy>=1.10
+qpsolvers>=4.0
+quadprog>=0.1.11
+
+# simulation videos, experiment plots
+matplotlib>=3.7
+imageio>=2.30
+imageio-ffmpeg>=0.4
+pillow>=9.0

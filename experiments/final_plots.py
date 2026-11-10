@@ -3,14 +3,15 @@
     python -m experiments.final_plots
 """
 
+import os
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-import main
+import lidar_nav.navigate as nav
 import sim.scenarios as sc
-from movement.controller import ControlParams
+from lidar_nav.control.controller import ControlParams
 from sim.scenarios import DT
 from sim.sensors import SimSensors
 from experiments.two_pinch import (scene, load_prior_map, START, GOAL, Z_MAX,
@@ -32,7 +33,7 @@ def sigma_trace(seed=1):
     grid.integrate_scan = lambda *a, **kw: None
     ekf = sc.make_ekf(START)
     sens = SimSensors(seg, START, params, dt=DT, z_max=Z_MAX, sigma_range=0.02, seed=seed)
-    r = main.navigate(sens, grid, ekf, np.array(GOAL), params, dt=DT,
+    r = nav.navigate(sens, grid, ekf, np.array(GOAL), params, dt=DT,
                       max_cycles=2500, use_covariance=False)
     x = np.array([i["pose"][0] for i in r["log"]])
     P = np.array([i["P3"] for i in r["log"]])
@@ -54,12 +55,13 @@ def mechanism_figure():
     ax.legend(frameon=False, loc="upper left", bbox_to_anchor=(0.02, 0.88))
     fig.tight_layout()
     for ext in ("png", "svg"):
+        os.makedirs("docs/figures", exist_ok=True)
         fig.savefig(f"docs/figures/mechanism_sigma.{ext}", dpi=160)
     print("wrote docs/figures/mechanism_sigma.png / .svg")
 
 
 def result_figure():
-    d = np.load("experiments/final_results.npz")
+    d = np.load("experiments/results/final_results.npz")
     fig, ax = plt.subplots(figsize=(6.4, 4.2))
     for R, k in sorted(set(zip(d["R"], d["k"])), key=lambda c: (c[1] > 0, c[0], c[1])):
         sel = (d["R"] == R) & (d["k"] == k)
@@ -84,6 +86,7 @@ def result_figure():
     ax.legend(frameon=False, loc="lower left")
     fig.tight_layout()
     for ext in ("png", "svg"):
+        os.makedirs("docs/figures", exist_ok=True)
         fig.savefig(f"docs/figures/result_fixed_vs_adaptive.{ext}", dpi=160)
     print("wrote docs/figures/result_fixed_vs_adaptive.png / .svg")
 

@@ -85,7 +85,7 @@ right moment; clearance tracks it.
 
 ### 1.2 CBF: the obstacle-velocity term
 
-`movement/cbf_baseline.py` — `fixed_radius_cbf_constraint(..., v_obs=None)`
+`lidar_nav/control/cbf_baseline.py` — `fixed_radius_cbf_constraint(..., v_obs=None)`
 
 ```
 ḣ  =  a_v·v  +  a_w·ω  −  ê·v_obs
@@ -109,7 +109,7 @@ is verified before any estimation error exists.
 
 ### 1.3 Tracking: estimate `v_obs` from the scan
 
-`movement/tracking.py` — new file
+`lidar_nav/control/tracking.py` — new file
 
 ```python
 cluster_scan(points, max_gap)        -> list of clusters (centroid, extent)
@@ -139,7 +139,7 @@ Decide and record the reason — it is a defensible line either way.
 
 ## Phase 2 — The decisive experiment
 
-`experiments/iso_safety.py` already exists; rerun it in a scenario with a mover.
+`experiments/archive/iso_safety.py` already exists; rerun it in a scenario with a mover.
 
 **The question:** at equal minimum clearance, does the adaptive margin complete
 more tasks than a retuned fixed radius?

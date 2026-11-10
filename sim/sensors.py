@@ -132,15 +132,34 @@ class SimSensors:
     # ------------------------------------------------------------------ sensing
 
     def mover_state(self):
-        """Ground-truth centres, velocities and radii of the moving obstacles now."""
+        """Ground-truth centres, velocities and radii of the moving obstacles now.
+
+        A mover with a "span" walks back and forth that far along its velocity
+        direction; without one it walks in a straight line forever.
+        """
         t = self.cycle * self.dt
         if not self.movers:
             return np.zeros((0, 2)), np.zeros((0, 2)), np.zeros(0)
-        c = np.array([np.asarray(m["start"], float) + np.asarray(m["vel"], float) * t
-                      for m in self.movers])
-        v = np.array([np.asarray(m["vel"], float) for m in self.movers])
+        cs, vs = [], []
+        for m in self.movers:
+            p0 = np.asarray(m["start"], float)
+            v = np.asarray(m["vel"], float)
+            span = m.get("span")
+            speed = np.linalg.norm(v)
+            if span is None or speed < 1e-12:
+                cs.append(p0 + v * t)
+                vs.append(v)
+                continue
+            u = v / speed
+            d = (speed * t + m.get("phase", 0.0)) % (2 * span)
+            if d < span:
+                cs.append(p0 + u * d)
+                vs.append(v)
+            else:
+                cs.append(p0 + u * (2 * span - d))
+                vs.append(-v)
         rad = np.array([m["radius"] for m in self.movers])
-        return c, v, rad
+        return np.array(cs), np.array(vs), rad
 
     def _scan(self):
         """A fresh noisy scan from the true pose. Only called once per revolution."""

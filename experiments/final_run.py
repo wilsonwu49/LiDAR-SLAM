@@ -8,6 +8,7 @@ import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
+import os
 import numpy as np
 
 from experiments.two_pinch import trial
@@ -77,10 +78,11 @@ def main():
 
     keys = ("R", "k", "seed", "clear_early", "clear_late", "margin_early",
             "margin_late", "reached", "cycles")
-    np.savez("experiments/final_results.npz",
+    os.makedirs("experiments/results", exist_ok=True)
+    np.savez("experiments/results/final_results.npz",
              kind=np.array([r["kind"] for r in rows]),
              **{key: np.array([r.get(key, np.nan) for r in rows], float) for key in keys})
-    print("\nwrote experiments/final_results.npz")
+    print("\nwrote experiments/results/final_results.npz")
 
 
 if __name__ == "__main__":

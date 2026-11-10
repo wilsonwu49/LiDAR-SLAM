@@ -22,9 +22,9 @@ produce collisions -- that was measured too.
 
 import numpy as np
 
-import main
+import lidar_nav.navigate as nav
 import sim.scenarios as sc
-from movement.controller import ControlParams
+from lidar_nav.control.controller import ControlParams
 from sim.scenarios import DT
 from sim.sensors import SimSensors
 
@@ -70,7 +70,7 @@ def trial(R, k, seed, gap_early=0.80, gap_late=0.75, max_cycles=4000):
     seg = scene(gap_early, gap_late)
     params = ControlParams()
     params.R = R          # set post-construction: both conditions are allowed to
-    params.k = k          # exceed the planner's inflation, see iso_safety.py
+    params.k = k          # exceed the planner's inflation, see archive/iso_safety.py
     grid = sc.make_grid(width=12.0, height=10.0)
     grid.z_max = Z_MAX
     load_prior_map(seg, grid)
@@ -78,7 +78,7 @@ def trial(R, k, seed, gap_early=0.80, gap_late=0.75, max_cycles=4000):
     ekf = sc.make_ekf(START)
     sens = SimSensors(seg, START, params, dt=DT, z_max=Z_MAX,
                       sigma_range=0.02, seed=seed)
-    r = main.navigate(sens, grid, ekf, np.array(GOAL), params, dt=DT,
+    r = nav.navigate(sens, grid, ekf, np.array(GOAL), params, dt=DT,
                       max_cycles=max_cycles, use_covariance=k > 0)
 
     trail = np.array(sens.trail)

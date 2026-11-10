@@ -8,12 +8,12 @@ import time
 
 import numpy as np
 
-from main import navigate
-from movement.controller import ControlParams
-from occupancy.occupancy_grid import OccupancyGridMap
+from lidar_nav.navigate import navigate
+from lidar_nav.control.controller import ControlParams
+from lidar_nav.mapping.occupancy_grid import OccupancyGridMap
 from sim.sensors import SimSensors
-from state_estimation.ekf import ESEKF
-from state_estimation.state import NominalState
+from lidar_nav.estimation.ekf import ESEKF
+from lidar_nav.estimation.state import NominalState
 
 DT = 0.02
 
