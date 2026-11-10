@@ -6,13 +6,14 @@ from movement.cbf_uncertainty import uncertainty_margin
 
 
 def safety_filter(u_nom, pose, obstacles, v_max, omega_max,
-                  R, ell, alpha_gain, H=None, P=None, k=0.0):
+                  R, ell, alpha_gain, H=None, P=None, k=0.0, obstacle_vels=None):
     """
     Project a nominal command onto the safe set (Parts C and G).
 
     u_nom       (2,) [v, omega] from pure pursuit
     pose        (3,) [x, y, theta]
     obstacles   (M, 2) obstacle centres in the map frame
+    obstacle_vels (M, 2) their map-frame velocities, or None for all static
     v_max       forward speed limit [m/s]
     omega_max   turn rate limit [rad/s]
     R           base safety radius [m]
@@ -51,12 +52,14 @@ def safety_filter(u_nom, pose, obstacles, v_max, omega_max,
     h_rows = []
     h_min = np.inf
 
-    for obstacle in obstacles:
+    for i, obstacle in enumerate(obstacles):
+        v_obs = None if obstacle_vels is None else obstacle_vels[i]
         R_obs = R      # per-obstacle: each gets its own margin, they must not accumulate
         if P is not None:
             R_obs += uncertainty_margin(pose, P, obstacle, k, ell)
         R_eff = max(R_eff, R_obs)
-        g_row, h_bound, h = fixed_radius_cbf_constraint(pose, obstacle, R_obs, ell, alpha_gain)
+        g_row, h_bound, h = fixed_radius_cbf_constraint(pose, obstacle, R_obs,
+                                                       ell, alpha_gain, v_obs)
         G_rows.append(g_row)
         h_rows.append(h_bound)
         h_min = min(h_min, h)

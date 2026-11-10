@@ -12,6 +12,35 @@ import numpy as np
 G = 9.80665
 
 
+def raycast_circles(origin, bearings, centres, radii, theta=0.0):
+    """
+    Range along each beam to the nearest circle, inf where no beam hits.
+
+    origin    (2,) sensor position in the world frame
+    bearings  (N,) beam angles in the BODY frame [rad]
+    centres   (K, 2) circle centres in the world frame
+    radii     (K,) circle radii [m]
+    theta     robot heading
+
+    returns   (N,) range per beam [m]
+
+    Moving obstacles are circles rather than segments so they can be advanced
+    by a velocity each step without rebuilding geometry.
+    """
+    if len(centres) == 0:
+        return np.full(len(bearings), np.inf)
+    d = np.stack([np.cos(bearings + theta), np.sin(bearings + theta)], axis=1)  # (N,2)
+    m = centres[None, :, :] - origin[None, None, :]                             # (1,K,2)
+    # |p + t d - c|^2 = r^2 with |d| = 1  ->  t^2 - 2 t (d.m) + |m|^2 - r^2 = 0
+    b = d[:, None, 0] * m[..., 0] + d[:, None, 1] * m[..., 1]                   # (N,K)
+    c = (m ** 2).sum(axis=2) - radii[None, :] ** 2                              # (1,K)
+    disc = b ** 2 - c
+    hit = disc >= 0
+    t = np.where(hit, b - np.sqrt(np.maximum(disc, 0.0)), np.inf)
+    t = np.where(t > 0, t, np.inf)              # ignore circles behind the sensor
+    return t.min(axis=1)
+
+
 def raycast_segments(origin, bearings, segments, z_max, theta=0.0):
     """
     Range along each beam to the nearest wall segment, inf where nothing is hit.
@@ -52,7 +81,7 @@ class SimSensors:
     Call read() once per control cycle and send(u) once per control cycle.
     """
 
-    def __init__(self, segments, pose_true, params, dt=0.02,
+    def __init__(self, segments, pose_true, params, dt=0.02, movers=None,
                  scan_hz=5.5, n_beams=1080, z_max=12.0,
                  sigma_range=0.02, sigma_accel=0.05, sigma_gyro=0.005,
                  sigma_encoder=0.01, tau_actuation=0.10, slip_frac=0.0,
@@ -74,6 +103,9 @@ class SimSensors:
         seed            RNG seed, so a trial is reproducible
         """
         self.segments = np.asarray(segments, dtype=float).reshape(-1, 4)
+        # movers: list of dicts(start=(x,y), vel=(vx,vy), radius=r). Circles so
+        # they can be advanced by a velocity without rebuilding geometry.
+        self.movers = list(movers or [])
         self.pose_true = np.array(pose_true, dtype=float)
         self.params = params
         self.dt = dt
@@ -99,10 +131,26 @@ class SimSensors:
 
     # ------------------------------------------------------------------ sensing
 
+    def mover_state(self):
+        """Ground-truth centres, velocities and radii of the moving obstacles now."""
+        t = self.cycle * self.dt
+        if not self.movers:
+            return np.zeros((0, 2)), np.zeros((0, 2)), np.zeros(0)
+        c = np.array([np.asarray(m["start"], float) + np.asarray(m["vel"], float) * t
+                      for m in self.movers])
+        v = np.array([np.asarray(m["vel"], float) for m in self.movers])
+        rad = np.array([m["radius"] for m in self.movers])
+        return c, v, rad
+
     def _scan(self):
         """A fresh noisy scan from the true pose. Only called once per revolution."""
         r = raycast_segments(self.pose_true[:2], self.bearings, self.segments,
                              self.z_max, self.pose_true[2])
+        c, _, rad = self.mover_state()
+        if len(c):
+            rm = raycast_circles(self.pose_true[:2], self.bearings, c, rad,
+                                 self.pose_true[2])
+            r = np.minimum(r, np.where(rm > self.z_max, np.inf, rm))
         finite = np.isfinite(r)
         r = r.copy()
         r[finite] += self.rng.normal(0.0, self.sigma_range, finite.sum())
@@ -185,4 +233,8 @@ class SimSensors:
                      np.einsum("ij,ij->i", p - a, e) / np.maximum(L2, 1e-12),
                      0.0)
         closest = a + np.clip(t, 0.0, 1.0)[:, None] * e
-        return float(np.linalg.norm(p - closest, axis=1).min()) - r_physical
+        d_min = float(np.linalg.norm(p - closest, axis=1).min())
+        c, _, rad = self.mover_state()
+        if len(c):
+            d_min = min(d_min, float((np.linalg.norm(c - p, axis=1) - rad).min()))
+        return d_min - r_physical

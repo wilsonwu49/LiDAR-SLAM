@@ -96,15 +96,17 @@ def make_grid(width=10.0, height=10.0, s=0.05):
 
 
 def run(segments, pose0, goal, use_covariance=True, slip=0.0, sigma_range=0.02,
-        max_cycles=2500, seed=1, params=None, ekf_kwargs=None, grid_kwargs=None):
+        max_cycles=2500, seed=1, z_max=12.0, params=None, ekf_kwargs=None,
+        grid_kwargs=None):
     """
     One trial. Returns a dict with both the believed and the true outcome.
     """
     params = params or ControlParams()
     grid = make_grid(**(grid_kwargs or {}))
+    grid.z_max = z_max                 # the map must not trust beams the sensor cannot see
     ekf = make_ekf(pose0, **(ekf_kwargs or {}))
     sens = SimSensors(segments, pose0, params, dt=DT, slip_frac=slip,
-                      sigma_range=sigma_range, seed=seed)
+                      sigma_range=sigma_range, z_max=z_max, seed=seed)
 
     t0 = time.perf_counter()
     res = navigate(sens, grid, ekf, np.array(goal, dtype=float), params, dt=DT,
