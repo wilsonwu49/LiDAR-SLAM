@@ -9,7 +9,7 @@ from lidar_nav.scan_matching.icp_ekf import icp_pose_covariance
 
 
 def icp_scan_match(source_pts, reference_pts, init_phi=0.0, init_t=(0.0, 0.0),
-                   max_iterations=30, tol_t=1e-3, tol_phi=1e-4, d_max=0.3, k_normals=32):
+                   max_iterations=30, tol_t=1e-3, tol_phi=1e-4, d_max=0.3, k_normals=12):
     """Full point-to-line ICP for two 2D scans.
 
     Returns
